@@ -8,12 +8,6 @@ impl Board {
     /// from the transposition table.
     pub fn monotonic_hash(&self) -> u128 {
         let mut key: u128 = 0;
-        const PAWN_SHIFT: [u32; 2] = [5197, 46703]; // usually 0..=8; raw: [5184, 46656]
-        const KNIGHT_MULT: [u32; 2] = [1733, 577]; // usually 0..=2; raw: [1728, 576]
-        const LIGHT_BISHOP_MULT: [u32; 2] = [149, 293]; // usually 0..=1; raw: [144, 288]
-        const DARK_BISHOP_MULT: [u32; 2] = [73, 37]; // usually 0..=1; raw: [72, 36]
-        const ROOK_MULT: [u32; 2] = [5, 13]; // usually 0..=2; raw: [4,12]
-        const QUEEN_MULT: [u32; 2] = [3, 1]; // usually 0..=1; raw: [2,1]
 
         const DARK_SQUARES: Bitboard = 0xAA55AA55AA55AA55;
         const LIGHT_SQUARES: Bitboard = !DARK_SQUARES;
