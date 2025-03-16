@@ -85,11 +85,11 @@ impl Board {
         }
         for square in 8..=55 {
             if white_pawns & BB_SQUARES[64 - square] != 0 {
-                white_index += count_combinations((56 - square) as u64, white_pawns_left);
+                white_index += count_combinations((square - 8) as u64, white_pawns_left);
                 white_pawns_left -= 1;
             }
             if black_pawns & BB_SQUARES[square] != 0 {
-                black_index +=  count_combinations((square - 8) as u64, black_pawns_left);
+                black_index +=  count_combinations((56 - square) as u64, black_pawns_left);
                 black_pawns_left -= 1;
             }
         }
