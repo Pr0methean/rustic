@@ -53,8 +53,10 @@ impl Board {
                 return 0;
             }
             let mut combos = 1;
-            for i in 1..=r {
+            let mut i = 1;
+            while i <= r {
                 combos *= (n - i + 1) / i;
+                i += 1;
             }
             combos
         }
