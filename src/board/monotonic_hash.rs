@@ -1,5 +1,5 @@
 use crate::board::Board;
-use crate::board::defs::{Pieces, BB_SQUARES};
+use crate::board::defs::Pieces;
 use crate::defs::{Bitboard, Sides};
 
 impl Board {
@@ -88,13 +88,16 @@ impl Board {
             }
         }
         for square in 8..=55 {
-            if white_pawns & BB_SQUARES[64 - square] != 0 {
+            if white_pawns & (1u64 << (64 - square)) != 0 {
                 white_index += count_combinations((square - 8) as u64, white_pawns_left as u64);
                 white_pawns_left -= 1;
             }
-            if black_pawns & BB_SQUARES[square] != 0 {
-                black_index +=  count_combinations((56 - square) as u64, black_pawns_left as u64);
+            if black_pawns & (1u64 << square) != 0 {
+                black_index += count_combinations((56 - square) as u64, black_pawns_left as u64);
                 black_pawns_left -= 1;
+            }
+            if black_pawns_left == 0 && white_pawns_left == 0 {
+                break;
             }
         }
         key |= (((TOTAL_COMBINATIONS * (TOTAL_COMBINATIONS - black_index)) + TOTAL_COMBINATIONS - white_index) as u128) << 45;
