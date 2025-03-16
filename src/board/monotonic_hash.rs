@@ -21,9 +21,8 @@ impl Board {
 
         let white_pawns = self.get_pieces(Pieces::PAWN, Sides::WHITE);
         let black_pawns = self.get_pieces(Pieces::PAWN, Sides::BLACK);
-        // Max pieces key is 121_000 * 8 = 968_000, so each pieces key needs 20 bits.
+        // Max pieces key is 12100 * 9 + 1210 + 121 + 11 * 2 + 2 = 110255, so each pieces key needs 17 bits.
         for side in [Sides::WHITE, Sides::BLACK] {
-            let pawns = [white_pawns, black_pawns][side as usize].count_ones();
             let knights = self.get_pieces(Pieces::KNIGHT, side).count_ones();
             let bishops = self.get_pieces(Pieces::BISHOP, side);
             let light_bishops = (bishops & LIGHT_SQUARES).count_ones();
@@ -34,16 +33,15 @@ impl Board {
                 + 11 * knights
                 + 11 * 11 * light_bishops
                 + 11 * 11 * 10 * dark_bishops
-                + 11 * 11 * 10 * 10 * queens
-                + 11 * 11 * 10 * 10 * 10 * pawns;
+                + 11 * 11 * 10 * 10 * queens;
         }
-        key |= (pieces_keys[0] as u128) << 69 | (pieces_keys[1] as u128) << 89;
+        key |= (pieces_keys[0] as u128) | (pieces_keys[1] as u128) << 17;
 
         // Castling fits in 4 bits because only the lower 4 bits are used.
-        key |= (self.game_state.castling as u128) << 65;
+        key |= (self.game_state.castling as u128) << 34;
 
         // En passant fits in 7 bits since en_passant is a square index.
-        key |= self.game_state.en_passant.map_or(0, |ep| (ep as u128 + 1) << 58);
+        key |= self.game_state.en_passant.map_or(0, |ep| (ep as u128 + 1) << 38);
 
         // For each side, we store a combination index of the pawns, reversed so that it
         // decreases as the pawns advance or are captured.
@@ -95,7 +93,7 @@ impl Board {
                 black_pawns_left -= 1;
             }
         }
-        key |= ((TOTAL_COMBINATIONS * (TOTAL_COMBINATIONS - black_index)) + TOTAL_COMBINATIONS - white_index) as u128;
+        key |= (((TOTAL_COMBINATIONS * (TOTAL_COMBINATIONS - black_index)) + TOTAL_COMBINATIONS - white_index) as u128) << 45;
         key
     }
 }
