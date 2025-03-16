@@ -491,7 +491,7 @@ impl TTree {
         (&self.map)
             .iter()
             .map(|v| v.value().occupied_bytes()
-                + size_of::<u32>() // map stores each key
+                + size_of::<u128>() // map stores each key
                  // FIXME: This ignores DashMap overhead
             )
             .sum::<usize>()
