@@ -469,7 +469,7 @@ impl<D: IHashData + Copy + Clone> TT<D> {
     }
 }
 
-type OurMap = DashMap<u32, TT<SearchData>>;
+type OurMap = DashMap<u128, TT<SearchData>>;
 
 pub struct TTree {
     map: OurMap,
@@ -543,7 +543,7 @@ impl TTree {
         ((current_size * 1000 + 500) / max_size) as u16
     }
 
-    pub fn remove_unreachable(&self, new_monotonic_hash: u32) {
+    pub fn remove_unreachable(&self, new_monotonic_hash: u128) {
         self.map.retain(|k, _| k <= &new_monotonic_hash);
         self.recalculate_room_to_grow();
     }

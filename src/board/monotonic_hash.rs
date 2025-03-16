@@ -1,24 +1,14 @@
 use crate::board::Board;
-use crate::board::defs::{Pieces, BB_RANKS};
+use crate::board::defs::{Pieces, BB_SQUARES};
 use crate::defs::{Bitboard, Sides};
 
 impl Board {
     /// A hash function that monotonically decreases whenever a pawn moves, a piece is captured, or a
-    /// player castles or gives up the right to castle. Used to quickly eliminate unreachable positions
+    /// player castles or gives up the right to castle or capture en passant. Used to quickly eliminate unreachable positions
     /// from the transposition table.
-    pub fn monotonic_hash(&self) -> u32 {
-        // Decreasing multipliers for stronger pieces
-        // Each side can have 0..=8 pawns and usually has 0..=1 or 0..=2 of each other piece,
-        // which works out to only 419_903 reasonably likely values for each side. But "unreasonable"
-        // numbers of all pieces except pawns can happen because of pawn promotions in excess of
-        // those needed to replace captured pieces. To give these unreasonable numbers a chance of
-        // not colliding with reasonable ones, we round up each multiplier generated on this basis
-        // to the next prime. (The "raw" values in the comments below are the values we'd be using
-        // with no such rounding.)
-        //
-        // The maximum sum of both pieces keys is
-        // 46_703*8+5197*8+1733*2+577*2+293+149+73+37+13*2+5*2+3+1 == 420_412.
-        const PAWN_MULT: [u32; 2] = [5197, 46703]; // usually 0..=8; raw: [5184, 46656]
+    pub fn monotonic_hash(&self) -> u128 {
+        let mut key: u128 = 0;
+        const PAWN_SHIFT: [u32; 2] = [5197, 46703]; // usually 0..=8; raw: [5184, 46656]
         const KNIGHT_MULT: [u32; 2] = [1733, 577]; // usually 0..=2; raw: [1728, 576]
         const LIGHT_BISHOP_MULT: [u32; 2] = [149, 293]; // usually 0..=1; raw: [144, 288]
         const DARK_BISHOP_MULT: [u32; 2] = [73, 37]; // usually 0..=1; raw: [72, 36]
@@ -27,10 +17,11 @@ impl Board {
 
         const DARK_SQUARES: Bitboard = 0xAA55AA55AA55AA55;
         const LIGHT_SQUARES: Bitboard = !DARK_SQUARES;
-        let mut pieces_keys = [0u32; 2];
+        let mut pieces_keys = [0; 2];
 
         let white_pawns = self.get_pieces(Pieces::PAWN, Sides::WHITE);
         let black_pawns = self.get_pieces(Pieces::PAWN, Sides::BLACK);
+        // Max pieces key is 121_000 * 8 = 968_000, so each pieces key needs 20 bits.
         for side in [Sides::WHITE, Sides::BLACK] {
             let pawns = [white_pawns, black_pawns][side as usize].count_ones();
             let knights = self.get_pieces(Pieces::KNIGHT, side).count_ones();
@@ -39,51 +30,73 @@ impl Board {
             let dark_bishops = (bishops & DARK_SQUARES).count_ones();
             let rooks = self.get_pieces(Pieces::ROOK, side).count_ones();
             let queens = self.get_pieces(Pieces::QUEEN, side).count_ones();
-
-            // Simply add weighted piece counts
-            pieces_keys[side as usize] =
-                pawns * PAWN_MULT[side as usize] +
-                    knights * KNIGHT_MULT[side as usize] +
-                    light_bishops * LIGHT_BISHOP_MULT[side as usize] +
-                    dark_bishops * DARK_BISHOP_MULT[side as usize] +
-                    rooks * ROOK_MULT[side as usize] +
-                    queens * QUEEN_MULT[side as usize];
+            pieces_keys[side] = rooks
+                + 11 * knights
+                + 11 * 11 * light_bishops
+                + 11 * 11 * 10 * dark_bishops
+                + 11 * 11 * 10 * 10 * queens
+                + 11 * 11 * 10 * 10 * 10 * pawns;
         }
+        key |= (pieces_keys[0] as u128) << 69 | (pieces_keys[1] as u128) << 89;
 
-        // Maximum castling key is 420_271 * 15 because only the lower 4 bits are used.
-        let castling_key = self.game_state.castling as u32 * 420271;
+        // Castling fits in 4 bits because only the lower 4 bits are used.
+        key |= (self.game_state.castling as u128) << 65;
 
-        // Maximum en passant key is 97, since en passant captures only happen on ranks 3 and 6.
-        // It increases to 127 if we've read an invalid target from FEN input.
-        // Must be smaller than the difference between either side's pawn_key multipliers for their
-        // second and fourth ranks.
-        let en_passant_key = self.game_state.en_passant.map_or(0, |ep| ((ep as u32) << 1) + 1);
+        // En passant fits in 7 bits since en_passant is a square index.
+        key |= self.game_state.en_passant.map_or(0, |ep| (ep as u128 + 1) << 58);
 
-        // Use multipliers for rank weights
-        // Largest possible rank value is 255 for each side
-        // and the piece and castling keys leave a maximum value of 4288243248 for the pawn key,
-        // so the sum of the 2 largest multipliers should be less than 4288243248/255.
-        // The ones used here are the nearest primes to powers of the positive root of
-        // x.pow(10) + x.pow(11) == 4288243248.0/255.0, which is
-        // 4.455443274968434891800999910616226042276, excluding primes already used as multipliers
-        // above and adjusting the largest few to minimize the residual.
-        // Maximum pawn key is (13_734_121 + 3_082_517)*255 == 4_288_242_690
-        let mut pawns_key = 0u32;
-
-        // Both multipliers decrease as the pawns advance.
-        const WHITE_RANK_MULTIPLIERS: [u32; 7] = [0, 13734121, 155291, 34849, 397, 89, 2];
-        const BLACK_RANK_MULTIPLIERS: [u32; 7] = [0, 7, 19, 1753, 7823, 691878, 3082517];
-        for rank in 1..=6 {
-            let white_pawn_rank_key = (white_pawns & BB_RANKS[rank]) as u32
-                * WHITE_RANK_MULTIPLIERS[rank];
-            let black_pawn_rank_key = (black_pawns & BB_RANKS[rank]) as u32
-                * BLACK_RANK_MULTIPLIERS[rank];
-            pawns_key += white_pawn_rank_key + black_pawn_rank_key;
+        // For each side, we store a combination index of the pawns, reversed so that it
+        // decreases as the pawns advance or are captured.
+        // This method is based on https://math.stackexchange.com/a/1227692, adapted for the
+        // variable number of pawns.
+        // We need ceil(log2(TOTAL_COMBINATIONS)) == 58 bits total.
+        const fn count_combinations(n: u64, r: u64) -> u64 {
+            if n < r {
+                return 0;
+            }
+            let mut combos = 1;
+            for i in 1..=r {
+                combos *= (n - i + 1) / i;
+            }
+            combos
         }
+        const CHOOSE_OF_48: [u64; 9] = [
+            count_combinations(48, 0),
+            count_combinations(48, 1),
+            count_combinations(48, 2),
+            count_combinations(48, 3),
+            count_combinations(48, 4),
+            count_combinations(48, 5),
+            count_combinations(48, 6),
+            count_combinations(48, 7),
+            count_combinations(48, 8),
+        ];
+        const TOTAL_COMBINATIONS: u64 = CHOOSE_OF_48.iter().sum();
 
-        // Maximum total key is 4_288_242_690 + 420_412 + 420_271 * 15 + 97 == 4_294_967_264
-        // == u32::MAX - 31
-        pawns_key + pieces_keys[0] + pieces_keys[1] + castling_key + en_passant_key
+        let mut white_pawns_left = white_pawns.count_ones() as u64;
+        let mut black_pawns_left = black_pawns.count_ones() as u64;
+        let mut white_index = 0;
+        let mut black_index = 0;
+        for captured_or_promoted in (1..=8).rev() {
+            if white_pawns_left > captured_or_promoted {
+                white_index += CHOOSE_OF_48[white_pawns_left];
+            }
+            if black_pawns_left > captured_or_promoted {
+                black_index += CHOOSE_OF_48[black_pawns_left];
+            }
+        }
+        for square in 8..=55 {
+            if white_pawns & BB_SQUARES[64 - square] != 0 {
+                white_index += count_combinations((56 - square) as u64, white_pawns_left);
+                white_pawns_left -= 1;
+            }
+            if black_pawns & BB_SQUARES[square] != 0 {
+                black_index +=  count_combinations((square - 8) as u64, black_pawns_left);
+                black_pawns_left -= 1;
+            }
+        }
+        key |= ((TOTAL_COMBINATIONS * (TOTAL_COMBINATIONS - black_index)) + TOTAL_COMBINATIONS - white_index) as u128;
+        key
     }
 }
 
