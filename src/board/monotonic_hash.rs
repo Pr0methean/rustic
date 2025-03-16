@@ -69,7 +69,9 @@ impl Board {
             count_combinations(48, 7),
             count_combinations(48, 8),
         ];
-        const TOTAL_COMBINATIONS: u64 = CHOOSE_OF_48.iter().sum();
+        const TOTAL_COMBINATIONS: u64 = CHOOSE_OF_48[0] + CHOOSE_OF_48[1] + CHOOSE_OF_48[2]
+            + CHOOSE_OF_48[3] + CHOOSE_OF_48[4] + CHOOSE_OF_48[5] + CHOOSE_OF_48[6]
+            + CHOOSE_OF_48[7] + CHOOSE_OF_48[8];
 
         let mut white_pawns_left = white_pawns.count_ones() as usize;
         let mut black_pawns_left = black_pawns.count_ones() as usize;
